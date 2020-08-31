@@ -3,14 +3,16 @@ import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-
+# load datasets MNIST
 (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 x_train = x_train / 255.
 x_test = x_test / 255
 
 x_train = x_train.reshape(-1,28,28,1)
 x_test = x_test.reshape(-1,28,28,1)
+print(x_test.shape)
 
+# simple CNN Model similar with VGGNet
 model = tf.keras.models.Sequential([
     tf.keras.layers.Conv2D(filters=16, kernel_size=3, padding='same', input_shape=(28,28,1)),
     tf.keras.layers.Conv2D(filters=16, kernel_size=3, padding='same'),
@@ -29,9 +31,10 @@ model = tf.keras.models.Sequential([
 ])
 
 model.compile(optimizer=tf.keras.optimizers.Adam(lr=0.001), loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
-history = model.fit(x_train, y_train, epochs=10, batch_size=100, validation_split=0.25)
+# fitting
+history = model.fit(x_train, y_train, epochs=5, batch_size=100, validation_split=0.25)
 
-test_loss, test_acc = model.evaluate(x_test, y_test)
+test_loss, test_acc = model.evaluate(x_test, y_test, batch_size=100)
 
 # Adding rank and tournament selections by Choi, T
 # Adding one- and two-point crossovers by Choi, T
@@ -41,72 +44,46 @@ test_loss, test_acc = model.evaluate(x_test, y_test)
 Visualize Genetic Algorithm to find a maximum point in a function.
 Visit my tutorial website for more: https://morvanzhou.github.io/tutorials/
 """
-
+DNA_RANGE = 2
+#DNA_RANGE = 256
 DNA_SIZE = 28*28*8           # DNA length
+
 POP_SIZE = 100          # population size
-CROSS_RATE = 0.8        # mating probability (DNA crossover)
+CROSS_RATE = 0.9        # mating probability (DNA crossover)
 MUTATION_RATE = 0.001   # mutation probability
-N_GENERATIONS = 200
+N_GENERATIONS = 100
 
+NOISE_RATE = 0.15 #
+SLICE_SIZE = 1500
 
+# slice datasets add noise
 def F(x):
-    fitness = []
-    xx_train = (x_train + x) / 2
+    fitness = [] 
+
     for i in range(POP_SIZE):
-        loss, acc = model.evaluate(xx_train,y_train)
-    fitness.append(acc)
+        xx_test = []
+        #add noise
+        for j in range(SLICE_SIZE):
+            xx_test.append( (x_test[j]*(1-NOISE_RATE)) + (x[i] * NOISE_RATE) )
+        loss, acc = model.evaluate(x = np.array(xx_test), y = y_test[:SLICE_SIZE], batch_size=100, verbose=0)
+        fitness.append(acc)
+    print(np.average(fitness))
+
     return fitness
 
 # find non-zero fitness for selection
 def get_fitness(pred):
-    return 1/pred
+    return (test_acc - np.array(pred))*100
 
 # convert binary DNA to decimal and normalize
 def translateDNA(pop):
     pop = pop.reshape(POP_SIZE,28,28,8)
-    for i in range(28):
+    sub_pop = np.zeros((POP_SIZE,28,28,1))
+    for i in range(POP_SIZE):
         for j in range(28):
-            pop[i,j].dot(2 ** np.arange(8)) / 255. 
-
-    return pop
-
-
-def select(pop, fitness):   # nature selection wrt pop's fitness
-    idx = np.random.choice(np.arange(POP_SIZE), size=POP_SIZE, replace=True,
-                           p=fitness/fitness.sum())
-    return pop[idx]
-
-
-# Added by Choi, T for EA lectures
-def rank_select(pop, fitness):
-    # Efficient method to calculate the rank vector of a list in Python
-    # https://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
-    def rank_simple(vector):
-        return sorted(range(len(vector)), key=vector.__getitem__)
-
-    def rankdata(a):
-        n = len(a)
-        ivec = rank_simple(a)
-        svec = [a[rank] for rank in ivec]
-        sumranks = 0
-        dupcount = 0
-        newarray = [0]*n
-        for i in range(n):
-            sumranks += i
-            dupcount += 1
-            if i == n-1 or svec[i] != svec[i+1]:
-                averank = sumranks / float(dupcount) + 1
-                for j in range(i-dupcount+1, i+1):
-                    newarray[ivec[j]] = averank
-                sumranks = 0
-                dupcount = 0
-        return newarray
-
-    rank_fitness = rankdata(fitness)
-    idx = np.random.choice(np.arange(POP_SIZE), size=POP_SIZE, replace=True,
-                           p=list(map(lambda x: x / sum(rank_fitness), rank_fitness)))
-    return pop[idx]
-
+            for k in range(28):
+                sub_pop[i,j,k] = pop[i,j,k].dot(2 ** np.arange(8)) / 255. 
+    return sub_pop
 
 # Added by Choi, T for EA lectures
 def tournament_select(pop, fitness, tournament_size=2):
@@ -166,20 +143,43 @@ def mutate(child):
     return child
 
 
-pop = np.random.randint(2, size=(POP_SIZE, DNA_SIZE))   # initialize the pop DNA
+pop = np.random.randint(DNA_RANGE, size=(POP_SIZE, DNA_SIZE))   # initialize the pop DNA
+
+M_ = [] # maximum of generation
+A_ = [] # average of 
+N_ = [] # minimum of
 
 for _ in range(N_GENERATIONS):
-    # compute function value by extracting DNA
-    F_values = F(translateDNA(pop))
-
     # GA part (evolution)
-    fitness = get_fitness(F_values)
-    print("Most fitted DNA: ", pop[np.argmax(fitness), :])
+    F_value = F( translateDNA(pop) )
+    fitness = get_fitness(F_value)
+
     pop = tournament_select(pop, fitness)
     pop_copy = pop.copy()
     for parent in pop:
-        child = two_point_crossover(parent, pop_copy)
+        child = crossover(parent, pop_copy)
         child = mutate(child)
         parent[:] = child   # parent is replaced by its child
-    print('{} Generation Acc{}'.format(_, F_values))
 
+    # max.avg.min(except 0 value)
+    M_.append(np.max(fitness))
+    A_.append(np.average(fitness))
+    N_.append(np.min(fitness))
+    print(_+1, 'Gens :', M_[-1], A_[-1], N_[-1])
+pop = translateDNA(pop)
+
+for i in range(3):
+    plt.subplot(3,3,i*3+1)
+    plt.imshow(x_test[i], cmap='gray')
+    plt.subplot(3,3,i*3+2)
+    fnt = list(fitness)
+    print((pop[fnt.index(max(fnt))]).reshape(28,28,1).shape)
+    plt.imshow((pop[fnt.index(max(fnt))]).reshape(28,28)*255 ,cmap='gray')
+    plt.subplot(3,3,i*3+3)
+    plt.imshow(((x_test[i]*(1-NOISE_RATE) + (pop[fnt.index(max(fnt))])*NOISE_RATE).reshape(28,28))*255 ,cmap='gray')
+plt.show()
+
+plt.plot(M_, 'r-', label='Max')
+plt.plot(A_, 'g-', label='Avg')
+plt.plot(N_, 'b-', label='Min')
+plt.show()
