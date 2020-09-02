@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import time
 
 # load datasets MNIST
 (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -47,22 +48,24 @@ test_loss, test_acc = model.evaluate(x_test, y_test, batch_size=100)
 Visualize Genetic Algorithm to find a maximum point in a function.
 Visit my tutorial website for more: https://morvanzhou.github.io/tutorials/
 """
-DNA_RANGE = 2
-#DNA_RANGE = 256
-DNA_SIZE = 28*28*8           # DNA length
+#DNA_RANGE = 2
+#DNA_SIZE = 28*28*8
+DNA_RANGE = 256
+DNA_SIZE = 28*28        # DNA length
 
 POP_SIZE = 100          # population size
 CROSS_RATE = 0.9        # mating probability (DNA crossover)
-MUTATION_RATE = 0.001   # mutation probability
-N_GENERATIONS = 100
+MUTATION_RATE = 0.005   # mutation probability
+N_GENERATIONS = 5000
 
-SLICE_SIZE = 1500
+SLICE_SIZE = 2500
 
 def mse(signal,noised_signal):
     return np.average( (signal-noised_signal)**2 )
 
 # add noise image at test dataset and get accuracy at pre-trained model
 def get_fitness(pop):
+    pop = pop.reshape(-1,28,28)
     errored_accuracy = [] 
     errored_difference = []
     for i in range(POP_SIZE):
@@ -71,18 +74,16 @@ def get_fitness(pop):
 
         for j in range(SLICE_SIZE):
             xx_test.append( x_test_[j] ^ pop[i] ) # make errored image by exclusive or(XOR) operator
-            xx_diff.append( np.average((x_test_[j] - pop[i]) ** 2) ) # difference and square
+            xx_diff.append( mse(x_test_[j], xx_test[-1])  ) # difference and square
         # get accuracy rate
-        loss, acc = model.evaluate(x = np.array(xx_test), y = y_test[:SLICE_SIZE], batch_size=100, verbose=0)
+        loss, acc = model.evaluate(x = (np.array(xx_test).reshape(-1,28,28,1) / 255.) , y = y_test[:SLICE_SIZE], batch_size=100, verbose=0)
         errored_accuracy.append(acc)
-        erroed_difference.append(np.average(xx_diff))
-    print(np.average(fitness))
+        errored_difference.append(np.average(xx_diff))
+    fitness = np.array(errored_accuracy) / (np.array(errored_difference)*1e3)
+    print(np.average(fitness), np.max(errored_accuracy)*100)
 
     return fitness
 
-# find non-zero fitness for selection
-def get_fitness(pred_acc, pred_mse):
-    return (test_acc - np.array(pred_acc))*100
 
 # convert binary DNA to decimal and normalize
 def translateDNA(pop):
@@ -158,9 +159,11 @@ A_ = [] # average of
 N_ = [] # minimum of
 
 for _ in range(N_GENERATIONS):
+    start = time.time()
     # GA part (evolution)
 
-    fitness = get_fitness(translateDNA(pop))
+    #fitness = get_fitness(translateDNA(pop))
+    fitness = get_fitness(pop)
 
     pop = tournament_select(pop, fitness)
     pop_copy = pop.copy()
@@ -173,18 +176,18 @@ for _ in range(N_GENERATIONS):
     M_.append(np.max(fitness))
     A_.append(np.average(fitness))
     N_.append(np.min(fitness))
-    print(_+1, 'Gens :', M_[-1], A_[-1], N_[-1])
-pop = translateDNA(pop)
+    print(_+1, 'Gens :', M_[-1], A_[-1], N_[-1], " %.2f secs"%(time.time() - start))
+
+pop = pop.reshape(-1,28,28)
+fnt = list(fitness)
 
 for i in range(3):
     plt.subplot(3,3,i*3+1)
     plt.imshow(x_test[i], cmap='gray')
     plt.subplot(3,3,i*3+2)
-    fnt = list(fitness)
-    print((pop[fnt.index(max(fnt))]).reshape(28,28,1).shape)
-    plt.imshow((pop[fnt.index(max(fnt))]).reshape(28,28)*255 ,cmap='gray')
-    plt.subplot(3,3,i*3+3)
-    plt.imshow((x_test_[i] ^ pop[fnat.index(max(fnt))]) ).reshape(28,28))*255 ,cmap='gray')
+    plt.imshow( pop[fnt.index(max(fnt))] ,cmap='gray')
+    plt.subplot(3,3,i*3+3) # merged image
+    plt.imshow( x_test_[i] ^ pop[fnt.index(max(fnt))] ,cmap='gray')
 plt.show()
 
 plt.plot(M_, 'r-', label='Max')
