@@ -4,7 +4,7 @@ Team Name : GA
 Team members
 Coach : Tae Jong Choi, Jong Hyun Lee
 Leader : Chang Gil Jeong
-Member : Hyun Woo Chw
+Member : Hyun Woo Chu
 
 National funding education cource of AI, KSA
 
