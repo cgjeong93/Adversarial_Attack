@@ -16,4 +16,9 @@ Python 3.8.5
 Update
 Aug 31, 2020 - Noise image optimize with 8bit DNA Genetic Algorithm
 Aug 31, 2020 - Noise image optimize and attack simple MNIST classification model
+<<<<<<< HEAD
+Sep  2, 2020 - Merge images using XOR operator, DNA type changed int8,  When N_Gen. = 200, POP_SIZE = 100, decreased accuracy was 6%
+Sep 11, 2020 - Try Multicore GA process using pytorch. but torch testset runtime is too high
+=======
 Sep   2, 2020 - Merge images using XOR operator, DNA type changed int8,  When N_Gen. = 200, POP_SIZE = 100, decreased accuracy was 6%
+>>>>>>> 2409dc43ea862ceec0a0b881a9cb34fb4f31a3bc

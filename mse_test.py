@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+
+=======
+>>>>>>> 2409dc43ea862ceec0a0b881a9cb34fb4f31a3bc
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -21,4 +25,8 @@ for i in range(9):
     plt.imshow( x_test[0] ^ np.array(pop/3**i, dtype='int8') , cmap='gray')
     plt.title( '%d mse:%.2f' % (i, mse(x_test[0], x_test[0] ^ np.array(pop/3**i, dtype='int8') ) ) )
     plt.axis('off')
+<<<<<<< HEAD
 plt.show()
+=======
+plt.show()
+>>>>>>> 2409dc43ea862ceec0a0b881a9cb34fb4f31a3bc
