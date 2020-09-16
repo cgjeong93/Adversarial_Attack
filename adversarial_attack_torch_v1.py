@@ -16,67 +16,58 @@ from multiprocessing import Process, Queue
 
 CPU_COUNTS = mp.cpu_count()
 
-EPOCHES = 5
-TEST_BATCH_SIZE = 250
-
 #DNA_RANGE = 2
 DNA_RANGE = 256
 DNA_SIZE = 32*32*3           # DNA length
 
-POP_SIZE = 100          # population size
+POP_SIZE = 150          # population size
 CROSS_RATE = 0.9        # mating probability (DNA crossover)
-MUTATION_RATE = 0.01   # mutation probability
-N_GENERATIONS = 200
+MUTATION_RATE = 0.05   # mutation probability
+N_GENERATIONS = 50
 
-UNIT_SIZE = 200
+UNIT_SIZE = 100
 SLICE_SIZE = UNIT_SIZE*CPU_COUNTS
 
+TEST_BATCH_SIZE = SLICE_SIZE
 
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        # nn.Conv2dConv2d(in_channels: int, out_channels: int,
-        #  kernel_size: _size_2_t, stride: _size_2_t=1,
-        #  padding: _size_2_t=0, dilation: _size_2_t=1, 
-        # groups: int=1, bias: bool=True, padding_mode: str='zeros')
-        self.conv1 = nn.Conv2d(
-            in_channels = 3, out_channels = 32,
-            kernel_size = 3, stride = 1)
-        self.conv2 = nn.Conv2d(
-            in_channels = 32, out_channels = 64,
-            kernel_size = 3, stride = 1)
-        self.conv3 = nn.Conv2d(
-            in_channels = 64, out_channels = 128,
-            kernel_size = 3, stride = 1)
-        self.dropout1 = nn.Dropout2d(0.25)
-        self.dropout2 = nn.Dropout2d(0.5)
-        self.fc1 = nn.Linear(21632, 1024)
-        self.fc2 = nn.Linear(1024, 1024)
-        self.fc3 = nn.Linear(1024, 10)
+epsilon = 0.01
+
+
+# https://github.com/kuangliu/pytorch-cifar/blob/master/models/vgg.py
+cfg = {
+    'VGG11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'VGG13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'VGG16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
+    'VGG19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+}
+class VGG(nn.Module):
+    def __init__(self, vgg_name):
+        super(VGG, self).__init__()
+        self.features = self._make_layers(cfg[vgg_name])
+        self.classifier = nn.Linear(512, 10)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
-        x = self.fc3(x)
-        x = F.relu(x)
-        output = F.softmax(x, dim=1)
-        return output
+        out = self.features(x)
+        out = out.view(out.size(0), -1)
+        out = self.classifier(out)
+        return out
+
+    def _make_layers(self, cfg):
+        layers = []
+        in_channels = 3
+        for x in cfg:
+            if x == 'M':
+                layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+            else:
+                layers += [nn.Conv2d(in_channels, x, kernel_size=3, padding=1),
+                           nn.BatchNorm2d(x),
+                           nn.ReLU(inplace=True)]
+                in_channels = x
+        layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
+        return nn.Sequential(*layers)
+
 
 def test(model, device, test_loader):
-    model.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
@@ -107,23 +98,24 @@ Visit my tutorial website for more: https://morvanzhou.github.io/tutorials/
 def mse(signal,noised_signal):
     return np.average( (signal-noised_signal)**2 )
 def image_xor( image_a, image_b ):
-    return image_a ^ image_b
+    return image_a * (1-epsilon) + image_b * epsilon
+    # return image_a ^ image_b
 
-def get_noised_image_and_mse( signal_set, noise ):#, q_test:Queue , q_diff:Queue ):
+def get_noised_image_and_mse( signal_set, noise , q_test:Queue , q_diff:Queue ):
     xx_test = [] 
-    xx_diff = []
+    #xx_diff = []
     for i in range(len(signal_set)):
         xx_test.append( image_xor(signal_set[i] , noise) ) # make errored image by exclusive or(XOR) operator
-        xx_diff.append( mse(signal_set[i] , noise )) # get difference as squared scale
-    # q_test.put(xx_test)
-    # q_diff.put(xx_diff)
-    return xx_test, xx_diff
+        #xx_diff.append( mse(signal_set[i] , noise )) # get difference as squared scale
+    q_test.put(xx_test)
+    #q_diff.put(xx_diff)
+    return xx_test#, xx_diff
 
 # add noise image at test dataset and get accuracy at pre-trained model
 def get_fitness(load_model, pop, dataset, device, test_acc, kwargs, transform):
     fitness = []
     for i in range(POP_SIZE):
-        start = time.time()
+        #start = time.time()
         # sharing Queue
         q_test = Queue()
         q_diff = Queue()
@@ -140,31 +132,29 @@ def get_fitness(load_model, pop, dataset, device, test_acc, kwargs, transform):
         #x_test_.to(device)
 
         # make process
-        # for j in range(CPU_COUNTS):
-        #     p.append(Process(target=get_noised_image_and_mse, args=(x_test_[UNIT_SIZE*j:UNIT_SIZE*(j+1)], pop[i],q_test, q_diff))) 
-        #     p[j].start()
+        for j in range(CPU_COUNTS):
+            p.append(Process(target=get_noised_image_and_mse, args=(x_test_[UNIT_SIZE*j:UNIT_SIZE*(j+1)], pop[i],q_test, q_diff))) 
+            p[j].start()
 
     
         xx_test, xx_diff = [], []
-        xx_test , xx_diff = get_noised_image_and_mse( x_test_[:SLICE_SIZE], pop[i])
+        # xx_test , xx_diff = get_noised_image_and_mse( x_test_[:SLICE_SIZE], pop[i])
         
         
-
-        # for _ in range(CPU_COUNTS):
-        #     xx_test.append(q_test.get()) 
-        #     xx_diff.append(q_diff.get())
+        for _ in range(CPU_COUNTS):
+            xx_test.append(q_test.get()) 
+            #xx_diff.append(q_diff.get())
         adv_dataset.data = np.array(xx_test,dtype=np.uint8).reshape(-1,32,32,3)
 
         data_loader = torch.utils.data.DataLoader(adv_dataset, **kwargs)
-
         # get accuracy rate
         acc = test(load_model, device, data_loader)
-        if(np.average(xx_diff) < 2.25e2):
-            fitness.append(test_acc - acc - np.average(xx_diff)/1e1 )
-        else:
-            fitness.append( -9.9e10 )
-        print( " %.2f secs"%(time.time() - start))
-    print(np.average(fitness))
+        # if(np.average(xx_diff) < 1.25e3):
+        fitness.append(test_acc - acc)# - np.average(xx_diff)/1e4 )
+        # else:
+        #     fitness.append(test_acc - acc - np.average(xx_diff)/1e1 )
+        #print("{:.2}secs".format(time.time()-start))
+    print('Acc: {:.6f}'.format(acc),end=' ')
 
     return fitness
 
@@ -238,7 +228,7 @@ def main():
     device = torch.device("cuda")
 
     kwargs = {'batch_size': TEST_BATCH_SIZE}
-    kwargs.update({'num_workers': 1,
+    kwargs.update({'num_workers': 2,
                     'pin_memory': True,
                     'shuffle': False},
                     )
@@ -248,7 +238,7 @@ def main():
         transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))
         ])
     # original datasets
-    dataset = datasets.CIFAR10('../cifar10_data', train=False, download=True,
+    dataset = datasets.CIFAR10('../cifar10_data', train=False, download=False,
                        transform=transform)
 
     # slicing
@@ -258,7 +248,7 @@ def main():
     test_loader = torch.utils.data.DataLoader(dataset, **kwargs)
 
     # Load Model
-    load_model = Net().to(device)
+    load_model = VGG('VGG19').to(device)
     load_model.load_state_dict(torch.load("cifar_cnn.pt"))
     load_model.eval()
     test_acc = test(load_model, device, test_loader)
@@ -291,26 +281,24 @@ def main():
         A_.append(np.average(fitness))
         N_.append(np.min(fitness))
         print(_+1, 'Gens :', M_[-1], A_[-1], N_[-1], " %.2f secs"%(time.time() - start))
+
     pop = translateDNA(pop)
 
+    temp_img = np.array(dataset.data[0]).reshape(32,32,3)
+    for i in range(3):
+        plt.subplot(3,3,i*3+1)
+        plt.imshow(temp_img)
+        plt.subplot(3,3,i*3+2)
+        fnt = list(fitness)
+        plt.imshow((pop[fnt.index(max(fnt))]).reshape(32,32,3))
+        plt.subplot(3,3,i*3+3) # merged image
+        plt.imshow(image_xor(temp_img , pop[fnt.index(max(fnt))].reshape(32,32,3)).reshape(32,32,3))
+    plt.show()
 
-
-    #     # drawing result
-    # for i in range(3):
-    #     plt.subplot(3,3,i*3+1)
-    #     plt.imshow(x_test[i], cmap='gray')
-    #     plt.subplot(3,3,i*3+2)
-    #     fnt = list(fitness)
-    #     print((pop[fnt.index(max(fnt))]).reshape(28,28,1).shape)
-    #     plt.imshow((pop[fnt.index(max(fnt))]).reshape(28,28)*255 ,cmap='gray')
-    #     plt.subplot(3,3,i*3+3) # merged image
-    #     plt.imshow((x_test_[i] ^ pop[fnt.index(max(fnt))]).reshape(28,28)*255 ,cmap='gray')
-    # plt.show()
-
-    # plt.plot(M_, 'r-', label='Max')
-    # plt.plot(A_, 'g-', label='Avg')
-    # plt.plot(N_, 'b-', label='Min')
-    # plt.show()
+    plt.plot(M_, 'r-', label='Max')
+    plt.plot(A_, 'g-', label='Avg')
+    plt.plot(N_, 'b-', label='Min')
+    plt.show()
 
 
 if __name__ == '__main__':
