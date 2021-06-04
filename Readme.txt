@@ -1,21 +1,11 @@
-Project Name : Adversarial attack pre-trained image classfication models with Genetic Algorithm
-Team Name : GA
+진화적 접근법을 활용한 마스터 노이즈 생성과 적대적 공격기법
+정창길(영남대,팀장), 추현우(대구한의대), 이종현((주)크리에이티브마인드), 최태종(경일대학교)*
 
-Team members
-Coach : Tae Jong Choi, Jong Hyun Lee
-Leader : Chang Gil Jeong
-Member : Hyun Woo Chu
+Project Name : Adversarial Attack Based on Master Noise Using Evolutionary Approach for Image Classification
+Chang Gil Jeong(Yeungnam Univ.), Hyun Woo Chu(Daegu Hanny Univ.), Jong Hyun Lee(CreativeMind.inc), Tae Jong Choi*(Kyungil Univ.)
 
-National funding education cource of AI, KSA
+Paper Link(Korean) : https://www.dbpia.co.kr/journal/articleDetail?nodeId=NODE10529764
 
 Tools
 Tensorflow 2.1.5
 Python 3.8.5
-
-
-Update
-Aug 31, 2020 - Noise image optimize with 8bit DNA Genetic Algorithm
-Aug 31, 2020 - Noise image optimize and attack simple MNIST classification model
-Sep  2, 2020 - Merge images using XOR operator, DNA type changed int8,  When N_Gen. = 200, POP_SIZE = 100, decreased accuracy was 6%
-Sep 11, 2020 - Try Multicore GA process using pytorch. but torch testset runtime is too high
-Sep 17, 2020 - add keras version(faster than pytorch)
